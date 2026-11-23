@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BlackSea Sentinel</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root{color-scheme:dark;--bg:#081521;--panel:#102437;--line:#20394d;--muted:#91a8ba;--cyan:#55c7df}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,Arial;background:var(--bg);color:#eaf3f8}
+header{padding:18px 24px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+.brand{font-weight:800;letter-spacing:1.8px}.brand span{color:var(--cyan)}.sub,.muted{color:var(--muted);font-size:12px}
+.status{border:1px solid #22694f;color:#77e0ad;border-radius:20px;padding:7px 12px;font-size:12px}
+main{padding:20px;max-width:1600px;margin:auto}.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px}
+.panel,.kpi{background:var(--panel);border:1px solid var(--line);border-radius:12px}.kpi{padding:16px}.kpi label{color:var(--muted);font-size:12px}.kpi strong{display:block;font-size:27px;margin-top:7px}
+.layout{display:grid;grid-template-columns:minmax(0,2fr) minmax(280px,1fr);gap:16px}.panel{padding:16px}h2{margin:0 0 12px;font-size:16px}
+#map{height:590px;border-radius:8px}.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+button{background:#16465b;color:#eaf3f8;border:1px solid #28718b;padding:8px 11px;border-radius:7px;cursor:pointer}
+.legend{display:flex;gap:16px;flex-wrap:wrap;color:var(--muted);font-size:12px;margin-top:12px}.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
+.item{border-top:1px solid var(--line);padding:12px 0;font-size:13px}.tag{color:#9bddec}
+@media(max-width:850px){.kpis{grid-template-columns:repeat(2,1fr)}.layout{grid-template-columns:1fr}#map{height:430px}}
+</style></head>
+<body>
+<header><div><div class="brand">PROJECT <span>AMPHITRITE</span></div><div class="sub">MARINE ENVIRONMENTAL INTELLIGENCE · DATA FOUNDATION</div></div><div class="status">● API CONNECTED</div></header>
+<main>
+<section class="kpis">
+<div class="kpi"><label>Habitat observations</label><strong id="hc">—</strong></div>
+<div class="kpi"><label>Environmental records</label><strong id="ec">—</strong></div>
+<div class="kpi"><label>Vessel positions</label><strong id="vc">—</strong></div>
+<div class="kpi"><label>Imported images</label><strong id="ic">—</strong></div>
+</section>
+<section class="layout"><div class="panel"><h2>Black Sea monitoring map</h2>
+<div class="toolbar"><button onclick="toggle('habitats')">Habitats</button><button onclick="toggle('environment')">Environmental points</button><button onclick="toggle('vessels')">Simulated vessels</button><button onclick="refresh()">Refresh</button></div>
+<div id="map"></div><div class="legend"><span><i class="dot" style="background:#36d399"></i>Habitat observations</span><span><i class="dot" style="background:#fbbf24"></i>Environmental observations</span><span><i class="dot" style="background:#60a5fa"></i>Simulated vessels</span></div>
+</div><aside class="panel"><h2>Data foundation status</h2><div id="status" class="muted">Loading…</div><h2 style="margin-top:22px">Latest environmental records</h2><div id="envlist" class="muted">Loading…</div><h2 style="margin-top:22px">Data integrity</h2>
+<div class="item"><span class="tag">Source provenance</span><br>Records retain source and timestamp metadata.</div><div class="item"><span class="tag">Simulation disclosure</span><br>Synthetic vessel positions are labelled.</div><div class="item"><span class="tag">Coordinates</span><br>WGS84 · EPSG:4326</div></aside></section></main>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const map=L.map('map').setView([43,28.4],7);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
+const layers={habitats:L.layerGroup().addTo(map),environment:L.layerGroup().addTo(map),vessels:L.layerGroup().addTo(map)};
+function toggle(n){map.hasLayer(layers[n])?map.removeLayer(layers[n]):layers[n].addTo(map)}
+async function get(u){const r=await fetch(u);if(!r.ok)throw Error(u+' '+r.status);return r.json()}
+async function refresh(){try{
+const [h,e,v,im]=await Promise.all([get('/api/v1/habitats'),get('/api/v1/environment'),get('/api/v1/vessels'),get('/api/v1/images')]);
+Object.values(layers).forEach(x=>x.clearLayers());
+L.geoJSON(h,{pointToLayer:(f,ll)=>L.circleMarker(ll,{radius:7,color:'#36d399',fillOpacity:.85}),onEachFeature:(f,l)=>l.bindPopup(`<b>${f.properties.species||'Seagrass observation'}</b><br>${f.properties.scientific_name||''}<br>${f.properties.observed_at||'Date unknown'}<br>${f.properties.source}`)}).addTo(layers.habitats);
+L.geoJSON(e,{pointToLayer:(f,ll)=>L.circleMarker(ll,{radius:5,color:'#fbbf24',fillOpacity:.75}),onEachFeature:(f,l)=>l.bindPopup(`<b>${f.properties.variable}</b><br>${f.properties.value} ${f.properties.unit||''}<br>${f.properties.observed_at}<br>${f.properties.source}`)}).addTo(layers.environment);
+L.geoJSON(v,{pointToLayer:(f,ll)=>L.circleMarker(ll,{radius:5,color:'#60a5fa',fillOpacity:.8}),onEachFeature:(f,l)=>l.bindPopup(`<b>${f.properties.vessel_id}</b><br>${f.properties.speed_knots} kn<br>SIMULATED DATA`)}).addTo(layers.vessels);
+document.getElementById('hc').textContent=h.features.length;document.getElementById('ec').textContent=e.features.length;document.getElementById('vc').textContent=v.features.length;document.getElementById('ic').textContent=im.length;
+document.getElementById('status').innerHTML=`<div class="item">Habitat API <span class="tag">Connected</span></div><div class="item">Environmental <span class="tag">${e.features.length?'Data available':'Awaiting import'}</span></div><div class="item">Vessels <span class="tag">${v.features.length?'Simulated tracks loaded':'Awaiting import'}</span></div><div class="item">Images <span class="tag">${im.length} files</span></div>`;
+document.getElementById('envlist').innerHTML=e.features.slice(0,8).map(f=>`<div class="item"><b>${f.properties.variable}</b>: ${Number(f.properties.value).toFixed(2)} ${f.properties.unit||''}<br><span class="muted">${f.properties.observed_at} · ${f.properties.source}</span></div>`).join('')||'No environmental data imported yet.';
+}catch(err){document.getElementById('status').textContent=err.message;console.error(err)}}
+refresh();
+</script></body></html>
